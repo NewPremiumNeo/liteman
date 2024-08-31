@@ -1,5 +1,32 @@
 const { exec } = require('child_process');
+const https = require('https');
 const fs = require('fs');
+const unzipper = require('unzipper');
+
+// Function to download a file using HTTPS
+function downloadFile(url, destination) {
+    return new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(destination);
+        https.get(url, (response) => {
+            response.pipe(file);
+            file.on('finish', () => {
+                file.close(resolve);
+            });
+        }).on('error', (err) => {
+            fs.unlink(destination, () => reject(err));
+        });
+    });
+}
+
+// Function to extract a zip file
+function extractZip(source, destination) {
+    return new Promise((resolve, reject) => {
+        fs.createReadStream(source)
+            .pipe(unzipper.Extract({ path: destination }))
+            .on('close', resolve)
+            .on('error', reject);
+    });
+}
 
 // Function to execute a command and log its output
 function executeCommand(command, description) {
@@ -11,18 +38,18 @@ function executeCommand(command, description) {
         // Capture stdout and stderr streams
         process.stdout.on('data', (data) => {
             console.log(data.toString());
-            output += data.toString(); // Accumulate output
+            output += data.toString();
         });
 
         process.stderr.on('data', (data) => {
             console.error(data.toString());
-            output += data.toString(); // Accumulate output
+            output += data.toString();
         });
 
         process.on('exit', (code) => {
             if (code === 0) {
                 console.log(`\nFinished: ${description}\n`);
-                resolve(output); // Resolve with the accumulated output
+                resolve(output);
             } else {
                 reject(new Error(`Command "${command}" failed with exit code ${code}`));
             }
@@ -56,8 +83,10 @@ async function main() {
         await executeCommand('curl -s -L -o loop.bat https://gitlab.com/chamod12/loop-win10/-/raw/main/loop.bat', "Downloading loop.bat");
 
         // Step 2: Download LiteManager, extract it, and install dependencies
-        await executeCommand(`powershell -Command "(New-Object Net.WebClient).DownloadFile('https://www.litemanager.com/soft/litemanager_5.zip', 'litemanager.zip')"`, "Downloading LiteManager");
-        await executeCommand(`powershell -Command "Expand-Archive -Path 'litemanager.zip' -DestinationPath '%cd%'"`, "Extracting LiteManager");
+        const litemanagerUrl = 'https://www.litemanager.com/soft/litemanager_5.zip';
+        const litemanagerZip = 'litemanager.zip';
+        await downloadFile(litemanagerUrl, litemanagerZip);
+        await extractZip(litemanagerZip, process.cwd());
 
         // Step 3: Install Python package and Chocolatey package
         await executeCommand('pip install pyautogui --quiet', "Installing pyautogui");
